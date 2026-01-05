@@ -134,12 +134,18 @@ function AllToolsSection() {
                     </div>
                 </a>
 
-                {/* 준비 중 */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 opacity-50">
-                    <div className="text-4xl mb-4">⚔️</div>
-                    <h2 className="text-xl font-bold mb-2 text-slate-400">준비 중...</h2>
-                    <p className="text-slate-500 text-sm">새로운 도구를 준비하고 있습니다</p>
-                </div>
+                {/* 경매 입찰 계산기 */}
+                <a href="auction/" className="group">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-amber-500/50 transition-all hover:shadow-xl hover:shadow-amber-500/10">
+                        <div className="text-4xl mb-4">💰</div>
+                        <h2 className="text-xl font-bold mb-2 text-amber-400 group-hover:text-amber-300">
+                            경매 입찰 계산기
+                        </h2>
+                        <p className="text-slate-400 text-sm">
+                            레이드/필드보스 경매 손익분기점을 계산합니다
+                        </p>
+                    </div>
+                </a>
             </div>
         </section>
     );

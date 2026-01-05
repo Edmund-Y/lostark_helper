@@ -6,7 +6,8 @@ module.exports = {
     entry: {
         main: './public/main.jsx',
         abidos: './public/abidoscalculator/calculator.jsx',
-        dispatch: './public/dispatch/calculator.jsx'
+        dispatch: './public/dispatch/calculator.jsx',
+        auction: './public/auction/calculator.jsx'
     },
     output: {
         path: path.resolve(__dirname, 'docs'),
@@ -42,6 +43,11 @@ module.exports = {
             template: './public/dispatch/index.html',
             filename: 'dispatch/index.html',
             chunks: ['dispatch']
+        }),
+        new HtmlWebpackPlugin({
+            template: './public/auction/index.html',
+            filename: 'auction/index.html',
+            chunks: ['auction']
         })
     ],
     resolve: {
