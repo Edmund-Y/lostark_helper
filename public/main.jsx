@@ -111,12 +111,15 @@ function AllToolsSection() {
                 {/* 아비도스 계산기 */}
                 <a href="abidoscalculator/" className="group">
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 hover:border-amber-500/50 transition-all hover:shadow-xl hover:shadow-amber-500/10">
-                        <div className="text-4xl mb-4">🪓</div>
+                        <div className="flex items-center gap-2 mb-4">
+                            <span className="text-4xl">🪓</span>
+                            <span className="text-4xl">🌟</span>
+                        </div>
                         <h2 className="text-xl font-bold mb-2 text-amber-400 group-hover:text-amber-300">
-                            아비도스 계산기
+                            아비도스 / 상급 아비도스 계산기
                         </h2>
                         <p className="text-slate-400 text-sm">
-                            아비도스 목재 제작을 위한 최적의 재료 조합을 계산합니다
+                            아비도스·상급 아비도스 목재 제작을 위한 최적의 재료 조합을 계산합니다
                         </p>
                     </div>
                 </a>

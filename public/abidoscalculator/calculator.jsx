@@ -1,8 +1,39 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 
-// 게임 상수 - 레시피 (벌목 기준)
-const RECIPE = { abidosWood: 33, softWood: 45, wood: 86, gold: 0, output: 15 };
+// 크래프트 모드별 레시피
+const RECIPES = {
+    basic: {
+        id: 'basic',
+        label: '아비도스',
+        shortLabel: '기본',
+        emoji: '🪓',
+        accent: 'amber',
+        outputName: '아비도스 목재',
+        abidosWood: 33,
+        softWood: 45,
+        wood: 86,
+        gold: 0,
+        output: 15,
+        maxCraft: 40,
+        defaultCraft: 30
+    },
+    advanced: {
+        id: 'advanced',
+        label: '상급 아비도스',
+        shortLabel: '상급',
+        emoji: '🌟',
+        accent: 'violet',
+        outputName: '상급 아비도스 목재',
+        abidosWood: 43,
+        softWood: 59,
+        wood: 112,
+        gold: 0,
+        output: 1,
+        maxCraft: 40,
+        defaultCraft: 10
+    }
+};
 
 // 정확한 교환 비율
 const EXCHANGE = {
@@ -16,8 +47,6 @@ const EXCHANGE = {
 };
 
 const MIN_UNIT = 100;
-const MAX_CRAFT = 40;
-const DEFAULT_CRAFT = 30;
 
 // 재료 정보
 const MATERIALS = {
@@ -26,6 +55,46 @@ const MATERIALS = {
     sturdyWood: { name: '튼튼한 목재', emoji: '🔴', color: 'red' },
     abidosWood: { name: '아비도스 목재', emoji: '✨', color: 'amber' },
     dust: { name: '벌목의 가루', emoji: '💨', color: 'purple' },
+};
+
+// 모드별 테마 클래스 매핑 (Tailwind JIT가 클래스를 안전히 인식하도록 명시)
+const THEME = {
+    amber: {
+        text: 'text-amber-400',
+        textSoft: 'text-amber-300',
+        bg: 'bg-amber-500',
+        bgSoft: 'bg-amber-500/20',
+        bgGradFrom: 'from-amber-500',
+        bgGradTo: 'to-yellow-600',
+        border: 'border-amber-500',
+        borderSoft: 'border-amber-500/30',
+        ring: 'focus:ring-amber-500/20',
+        focusBorder: 'focus:border-amber-500',
+        shadow: 'shadow-amber-500/20',
+        rankBg: 'from-amber-400 to-yellow-500',
+        cardBg: 'from-amber-500/5 via-yellow-500/5 to-amber-500/5',
+        chipBg: 'bg-amber-500/10',
+        chipText: 'text-amber-400',
+        chipBorder: 'border-amber-500/20'
+    },
+    violet: {
+        text: 'text-violet-400',
+        textSoft: 'text-violet-300',
+        bg: 'bg-violet-500',
+        bgSoft: 'bg-violet-500/20',
+        bgGradFrom: 'from-violet-500',
+        bgGradTo: 'to-fuchsia-600',
+        border: 'border-violet-500',
+        borderSoft: 'border-violet-500/30',
+        ring: 'focus:ring-violet-500/20',
+        focusBorder: 'focus:border-violet-500',
+        shadow: 'shadow-violet-500/20',
+        rankBg: 'from-violet-400 to-fuchsia-500',
+        cardBg: 'from-violet-500/5 via-fuchsia-500/5 to-violet-500/5',
+        chipBg: 'bg-violet-500/10',
+        chipText: 'text-violet-400',
+        chipBorder: 'border-violet-500/20'
+    }
 };
 
 // 구매량 올림 계산
@@ -58,21 +127,8 @@ const SOURCING_STRATEGIES = {
     ]
 };
 
-// 가루 생성 효율 계산 (100 가루당 비용)
-function getBestDustSource(prices) {
-    const candidates = [
-        { source: 'wood', costPer100Dust: prices.wood * 1.25, produceAmount: 80, consumeAmount: 100 },
-        { source: 'softWood', costPer100Dust: prices.softWood * 0.625, produceAmount: 80, consumeAmount: 50 }
-    ];
-
-    const valid = candidates.filter(c => c.costPer100Dust > 0);
-    return valid.length > 0
-        ? valid.reduce((min, curr) => curr.costPer100Dust < min.costPer100Dust ? curr : min)
-        : candidates[0];
-}
-
 // 3. 통합 계산기 (모든 조합 생성)
-function generateAllCombinations(needed, inv, prices, bonusRate = 0) {
+function generateAllCombinations(needed, inv, prices, recipe, bonusRate = 0) {
     const methods = [];
 
     for (const wStrat of SOURCING_STRATEGIES.wood) {
@@ -83,6 +139,7 @@ function generateAllCombinations(needed, inv, prices, bonusRate = 0) {
                     inv,
                     prices,
                     { wood: wStrat, soft: sStrat, abidos: aStrat },
+                    recipe,
                     bonusRate
                 );
                 methods.push(method);
@@ -94,7 +151,7 @@ function generateAllCombinations(needed, inv, prices, bonusRate = 0) {
 }
 
 // 4. 개별 조합 계산 로직 (핵심)
-function calculateCombination(totalNeeded, originalInv, prices, strategies, bonusRate = 0) {
+function calculateCombination(totalNeeded, originalInv, prices, strategies, recipe, bonusRate = 0) {
     let inv = { ...originalInv };
     const purchases = { wood: 0, softWood: 0, sturdyWood: 0, abidosWood: 0 };
     const steps = [];
@@ -130,8 +187,8 @@ function calculateCombination(totalNeeded, originalInv, prices, strategies, bonu
         (purchases.abidosWood / 100) * prices.abidosWood;
 
     const totalCost = materialCost + totalNeeded.gold;
-    const totalOutput = totalNeeded.count * RECIPE.output * (1 + bonusRate / 100);
-    const costPerItem = totalCost / totalOutput;
+    const totalOutput = totalNeeded.count * recipe.output * (1 + bonusRate / 100);
+    const costPerItem = totalOutput > 0 ? totalCost / totalOutput : 0;
 
     return {
         title,
@@ -217,7 +274,7 @@ function processStrategy(targetType, amount, strategy, inv, purchases, steps, pr
         }
 
         if (remainingDustNeeded > 0) {
-            const src = strategy.dustSrc; // 가루 수급처 (wood, softWood, sturdyWood)
+            const src = strategy.dustSrc;
             const exchangePaths = {
                 wood: { consume: 100, produce: 80 },
                 softWood: { consume: 50, produce: 80 }
@@ -252,9 +309,27 @@ function processStrategy(targetType, amount, strategy, inv, purchases, steps, pr
     }
 }
 
+const MODE_STORAGE_KEY = 'abidosCalc.mode';
+
+function loadInitialMode() {
+    try {
+        const v = localStorage.getItem(MODE_STORAGE_KEY);
+        if (v === 'advanced' || v === 'basic') return v;
+    } catch (_) {}
+    return 'basic';
+}
+
 function AbidosCalculator() {
+    const [craftMode, setCraftMode] = useState(loadInitialMode);
+    const recipe = RECIPES[craftMode];
+    const theme = THEME[recipe.accent];
+
+    useEffect(() => {
+        try { localStorage.setItem(MODE_STORAGE_KEY, craftMode); } catch (_) {}
+    }, [craftMode]);
+
     // 입력 상태
-    const [targetCount, setTargetCount] = useState(String(DEFAULT_CRAFT));
+    const [targetCount, setTargetCount] = useState(String(recipe.defaultCraft));
     const [priceWood, setPriceWood] = useState('');
     const [priceSoft, setPriceSoft] = useState('');
     const [priceSturdy, setPriceSturdy] = useState('');
@@ -266,8 +341,14 @@ function AbidosCalculator() {
     const [invDust, setInvDust] = useState('');
     const [bonusRate, setBonusRate] = useState('0');
 
+    // 모드 변경 시 목표 개수를 해당 모드 기본값으로 재설정
+    useEffect(() => {
+        setTargetCount(String(recipe.defaultCraft));
+    }, [craftMode]);
+
     // UI 상태
     const [sortByPrice, setSortByPrice] = useState(true);
+    const [displayLimit, setDisplayLimit] = useState(5);
     const [showAllMethods, setShowAllMethods] = useState(false);
 
     // 숫자 입력 핸들러
@@ -282,18 +363,16 @@ function AbidosCalculator() {
 
     // 계산 결과
     const result = useMemo(() => {
-        const count = Math.max(1, Math.min(MAX_CRAFT, Number(targetCount) || DEFAULT_CRAFT));
+        const count = Math.max(1, Math.min(recipe.maxCraft, Number(targetCount) || recipe.defaultCraft));
 
-        // 총 필요량
         const totalNeeded = {
-            abidosWood: count * RECIPE.abidosWood,
-            softWood: count * RECIPE.softWood,
-            wood: count * RECIPE.wood,
-            gold: count * RECIPE.gold,
+            abidosWood: count * recipe.abidosWood,
+            softWood: count * recipe.softWood,
+            wood: count * recipe.wood,
+            gold: count * recipe.gold,
             count: count
         };
 
-        // 보유량
         const inventory = {
             wood: Number(invWood) || 0,
             softWood: Number(invSoft) || 0,
@@ -302,7 +381,6 @@ function AbidosCalculator() {
             dust: Number(invDust) || 0,
         };
 
-        // 가격
         const prices = {
             wood: Number(priceWood) || 0,
             softWood: Number(priceSoft) || 0,
@@ -310,13 +388,10 @@ function AbidosCalculator() {
             abidosWood: Number(priceAbidos) || 0,
         };
 
-        // 모든 조합 생성 (전역 함수 호출)
-        let methods = generateAllCombinations(totalNeeded, inventory, prices, Number(bonusRate) || 0);
+        let methods = generateAllCombinations(totalNeeded, inventory, prices, recipe, Number(bonusRate) || 0);
 
-        // 유효한 방법만 필터링
         const validMethods = methods.filter(m => m.isValid);
 
-        // 최저가 찾기
         if (validMethods.length > 0) {
             const minCost = Math.min(...validMethods.map(m => m.cost));
             validMethods.forEach(m => {
@@ -331,9 +406,8 @@ function AbidosCalculator() {
             hasValidMethod: validMethods.length > 0,
             bonusRate: Number(bonusRate) || 0
         };
-    }, [targetCount, priceWood, priceSoft, priceSturdy, priceAbidos, invWood, invSoft, invSturdy, invAbidos, invDust, bonusRate]);
+    }, [targetCount, priceWood, priceSoft, priceSturdy, priceAbidos, invWood, invSoft, invSturdy, invAbidos, invDust, bonusRate, recipe]);
 
-    // 정렬된 방법 목록
     const sortedMethods = useMemo(() => {
         const methods = [...result.methods];
         if (sortByPrice) {
@@ -349,32 +423,66 @@ function AbidosCalculator() {
         return methods;
     }, [result.methods, sortByPrice]);
 
-    // 표시 개수 (더보기 기능)
-    const [displayLimit, setDisplayLimit] = useState(5);
     const displayedMethods = showAllMethods ? sortedMethods : sortedMethods.slice(0, displayLimit);
+
+    // 모드별 빠른 선택 버튼
+    const quickCounts = craftMode === 'basic' ? [10, 20, 30, 40] : [5, 10, 20, 40];
+
+    const resetAll = () => {
+        setTargetCount(String(recipe.defaultCraft));
+        setPriceWood(''); setPriceSoft(''); setPriceSturdy(''); setPriceAbidos('');
+        setInvWood(''); setInvSoft(''); setInvSturdy(''); setInvAbidos(''); setInvDust('');
+        setBonusRate('0');
+    };
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 flex">
-            {/* ... 기존 스타일 및 사이드바 ... */}
             <style>{`
                 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; border-radius: 3px; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
                 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
+                @keyframes fadeSlide {
+                    from { opacity: 0; transform: translateY(4px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                .mode-anim { animation: fadeSlide 0.25s ease-out; }
             `}</style>
 
             {/* 사이드바 */}
             <aside className="w-80 bg-slate-900 border-r border-slate-800 flex flex-col fixed h-screen">
-                {/* 로고 */}
+                {/* 로고 + 모드 탭 */}
                 <div className="p-5 border-b border-slate-800">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center text-xl shadow-lg shadow-amber-500/20">
-                            🪓
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${theme.bgGradFrom} ${theme.bgGradTo} flex items-center justify-center text-xl shadow-lg ${theme.shadow} transition-all`}>
+                            {recipe.emoji}
                         </div>
                         <div>
-                            <h1 className="font-bold text-amber-400">아비도스</h1>
-                            <p className="text-xs text-slate-500">제작 계산기 v2.0</p>
+                            <h1 className={`font-bold ${theme.text} transition-colors`}>{recipe.label}</h1>
+                            <p className="text-xs text-slate-500">제작 계산기 v3.0</p>
                         </div>
+                    </div>
+
+                    {/* 모드 토글 (세그먼티드 컨트롤) */}
+                    <div className="bg-slate-800/70 rounded-lg p-1 flex gap-1">
+                        {Object.values(RECIPES).map((r) => {
+                            const active = craftMode === r.id;
+                            const rTheme = THEME[r.accent];
+                            return (
+                                <button
+                                    key={r.id}
+                                    onClick={() => setCraftMode(r.id)}
+                                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-bold transition-all ${
+                                        active
+                                            ? `bg-gradient-to-br ${rTheme.bgGradFrom} ${rTheme.bgGradTo} text-slate-900 shadow-md ${rTheme.shadow}`
+                                            : 'text-slate-400 hover:text-slate-200'
+                                    }`}
+                                >
+                                    <span>{r.emoji}</span>
+                                    <span>{r.shortLabel}</span>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -383,12 +491,7 @@ function AbidosCalculator() {
                     <div className="flex items-center justify-between mb-1.5">
                         <label className="text-xs font-medium text-slate-400">제작 개수</label>
                         <button
-                            onClick={() => {
-                                setTargetCount(String(DEFAULT_CRAFT));
-                                setPriceWood(''); setPriceSoft(''); setPriceSturdy(''); setPriceAbidos('');
-                                setInvWood(''); setInvSoft(''); setInvSturdy(''); setInvAbidos(''); setInvDust('');
-                                setBonusRate('0');
-                            }}
+                            onClick={resetAll}
                             className="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-slate-800 text-slate-400 hover:bg-red-500/20 hover:text-red-400 border border-slate-700 hover:border-red-500/30 transition-all"
                         >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -402,19 +505,19 @@ function AbidosCalculator() {
                             type="text"
                             inputMode="numeric"
                             value={targetCount}
-                            onChange={handleNumericInput(setTargetCount, MAX_CRAFT)}
-                            placeholder={String(DEFAULT_CRAFT)}
-                            className="w-16 text-center text-xl font-black bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-amber-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all"
+                            onChange={handleNumericInput(setTargetCount, recipe.maxCraft)}
+                            placeholder={String(recipe.defaultCraft)}
+                            className={`w-16 text-center text-xl font-black bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 ${theme.text} focus:outline-none ${theme.focusBorder} focus:ring-2 ${theme.ring} transition-all`}
                         />
-                        <span className="text-slate-500 text-sm">/ 40개</span>
+                        <span className="text-slate-500 text-sm">/ {recipe.maxCraft}회</span>
                     </div>
                     <div className="flex gap-1.5">
-                        {[10, 20, 30, 40].map((num) => (
+                        {quickCounts.map((num) => (
                             <button
                                 key={num}
                                 onClick={() => setTargetCount(String(num))}
                                 className={`flex-1 py-1 text-xs font-medium rounded-md transition-all ${Number(targetCount) === num
-                                    ? 'bg-amber-500 text-slate-900'
+                                    ? `${theme.bg} text-slate-900`
                                     : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                                     }`}
                             >
@@ -422,13 +525,16 @@ function AbidosCalculator() {
                             </button>
                         ))}
                     </div>
+                    <p className="mt-2 text-[11px] text-slate-500">
+                        제작 1회당 <span className={theme.text}>{recipe.outputName} {recipe.output}개</span>
+                    </p>
                 </div>
 
                 {/* 대성공 확률 */}
                 <div className="px-5 py-3 border-b border-slate-800">
                     <div className="flex items-center justify-between mb-2">
                         <label className="text-xs font-medium text-slate-400">대성공 확률</label>
-                        <span className="text-xs text-amber-400 font-bold">{bonusRate}%</span>
+                        <span className={`text-xs ${theme.text} font-bold`}>{bonusRate}%</span>
                     </div>
                     <div className="flex items-center gap-3">
                         <input
@@ -438,7 +544,7 @@ function AbidosCalculator() {
                             step="0.5"
                             value={bonusRate}
                             onChange={(e) => setBonusRate(e.target.value)}
-                            className="flex-1 accent-amber-500 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer"
+                            className={`flex-1 ${recipe.accent === 'amber' ? 'accent-amber-500' : 'accent-violet-500'} h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer`}
                         />
                         <div className="relative w-14">
                             <input
@@ -446,7 +552,7 @@ function AbidosCalculator() {
                                 inputMode="numeric"
                                 value={bonusRate}
                                 onChange={handleNumericInput(setBonusRate, 100)}
-                                className="w-full text-center text-xs bg-slate-800 border border-slate-700 rounded px-1 py-1 text-slate-300 focus:outline-none focus:border-amber-500"
+                                className={`w-full text-center text-xs bg-slate-800 border border-slate-700 rounded px-1 py-1 text-slate-300 focus:outline-none ${theme.focusBorder}`}
                             />
                         </div>
                     </div>
@@ -479,7 +585,7 @@ function AbidosCalculator() {
                                             value={value}
                                             onChange={handleNumericInput(setter)}
                                             placeholder="0"
-                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-right pr-12 text-sm focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/20 transition-all"
+                                            className={`w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-right pr-12 text-sm focus:outline-none ${theme.focusBorder} focus:ring-1 ${theme.ring} transition-all`}
                                         />
                                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs">골드</span>
                                     </div>
@@ -543,7 +649,7 @@ function AbidosCalculator() {
                 </div>
 
                 <div className="p-4 border-t border-slate-800 text-center">
-                    <p className="text-xs text-slate-600">v2.1 • 전체 경로 탐색 지원</p>
+                    <p className="text-xs text-slate-600">v3.0 • 기본 / 상급 모드 지원</p>
                 </div>
             </aside>
 
@@ -551,11 +657,16 @@ function AbidosCalculator() {
             <main className="flex-1 ml-80 min-h-screen">
                 <header className="sticky top-0 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800 z-10">
                     <div className="px-6 py-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h2 className="text-lg font-bold text-slate-200">제작 시뮬레이션</h2>
+                        <div className="flex items-center justify-between gap-4 flex-wrap">
+                            <div className="mode-anim" key={craftMode}>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded ${theme.chipBg} ${theme.chipText} border ${theme.chipBorder}`}>
+                                        {recipe.shortLabel} MODE
+                                    </span>
+                                    <h2 className="text-lg font-bold text-slate-200">{recipe.label} 제작 시뮬레이션</h2>
+                                </div>
                                 <p className="text-sm text-slate-500">
-                                    {Number(targetCount) || DEFAULT_CRAFT}개 제작 기준 • 총 {sortedMethods.length}가지 전략 분석 완료
+                                    {Number(targetCount) || recipe.defaultCraft}회 제작 기준 • 총 <span className="text-slate-300">{sortedMethods.length}</span>가지 전략 분석 완료
                                 </p>
                             </div>
                             <button
@@ -568,7 +679,37 @@ function AbidosCalculator() {
                     </div>
                 </header>
 
-                <div className="p-6">
+                <div className="p-6 mode-anim" key={`${craftMode}-body`}>
+                    {/* 결과 요약 배너 */}
+                    <div className={`mb-6 rounded-2xl border ${theme.borderSoft} bg-gradient-to-r ${theme.cardBg} p-5 flex items-center justify-between flex-wrap gap-4`}>
+                        <div className="flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${theme.bgGradFrom} ${theme.bgGradTo} flex items-center justify-center text-2xl shadow-lg ${theme.shadow}`}>
+                                {recipe.emoji}
+                            </div>
+                            <div>
+                                <p className="text-xs text-slate-500">목표 산출량</p>
+                                <p className="text-2xl font-black text-slate-100">
+                                    {(result.totalNeeded.count * recipe.output).toLocaleString()}
+                                    <span className="text-sm font-normal text-slate-500 ml-1">{recipe.outputName}</span>
+                                    {result.bonusRate > 0 && (
+                                        <span className={`text-xs font-medium ${theme.text} ml-2`}>
+                                            +{((result.totalNeeded.count * recipe.output) * result.bonusRate / 100).toFixed(1)} 대성공 보너스
+                                        </span>
+                                    )}
+                                </p>
+                            </div>
+                        </div>
+                        {sortedMethods.length > 0 && sortByPrice && (
+                            <div className="text-right">
+                                <p className="text-xs text-slate-500">최저 예상 비용</p>
+                                <p className={`text-2xl font-black ${theme.text}`}>
+                                    {Math.round(sortedMethods[0].cost).toLocaleString()}
+                                    <span className="text-sm font-normal text-slate-500 ml-1">골드</span>
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
                     {/* 필요 재료 카드 */}
                     <div className="grid grid-cols-3 gap-4 mb-6">
                         {[
@@ -577,11 +718,15 @@ function AbidosCalculator() {
                             { key: 'wood', total: result.totalNeeded.wood, inv: result.inventory.wood, bg: 'from-orange-500/10 to-amber-500/10', border: 'border-orange-500/20' },
                         ].map(({ key, total, inv, bg, border }) => {
                             const shortage = Math.max(0, total - inv);
+                            const perCraft = recipe[key];
                             return (
                                 <div key={key} className={`bg-gradient-to-br ${bg} rounded-2xl p-5 border ${border}`}>
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <span className="text-2xl">{MATERIALS[key].emoji}</span>
-                                        <span className="text-sm font-medium text-slate-300">{MATERIALS[key].name}</span>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-2xl">{MATERIALS[key].emoji}</span>
+                                            <span className="text-sm font-medium text-slate-300">{MATERIALS[key].name}</span>
+                                        </div>
+                                        <span className="text-[10px] text-slate-500 bg-slate-900/40 px-2 py-0.5 rounded">×{perCraft}/회</span>
                                     </div>
                                     <div className="space-y-1">
                                         <p className="text-2xl font-black text-slate-100">
@@ -625,7 +770,7 @@ function AbidosCalculator() {
                                 <div
                                     key={idx}
                                     className={`rounded-2xl border transition-all ${method.isCheapest
-                                        ? 'bg-gradient-to-r from-amber-500/5 via-yellow-500/5 to-amber-500/5 border-amber-500/30 shadow-xl shadow-amber-500/5'
+                                        ? `bg-gradient-to-r ${theme.cardBg} ${theme.borderSoft} shadow-xl ${theme.shadow}`
                                         : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
                                         }`}
                                 >
@@ -633,7 +778,7 @@ function AbidosCalculator() {
                                         <div className="flex items-start justify-between gap-4 mb-4">
                                             <div className="flex items-center gap-4">
                                                 {rank && (
-                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${rank === 1 ? 'bg-gradient-to-br from-amber-400 to-yellow-500 text-slate-900 shadow-lg shadow-amber-500/30'
+                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${rank === 1 ? `bg-gradient-to-br ${theme.rankBg} text-slate-900 shadow-lg ${theme.shadow}`
                                                         : rank === 2 ? 'bg-gradient-to-br from-slate-300 to-slate-400 text-slate-900'
                                                             : rank === 3 ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-slate-100'
                                                                 : 'bg-slate-800 text-slate-400'
@@ -643,7 +788,7 @@ function AbidosCalculator() {
                                                 )}
                                                 <div>
                                                     {method.isCheapest && (
-                                                        <span className="inline-block text-xs px-2.5 py-1 bg-amber-500/20 text-amber-400 rounded-full font-medium mb-1">
+                                                        <span className={`inline-block text-xs px-2.5 py-1 ${theme.chipBg} ${theme.chipText} rounded-full font-medium mb-1`}>
                                                             ✅ 최저가
                                                         </span>
                                                     )}
@@ -654,11 +799,16 @@ function AbidosCalculator() {
                                             <div className="text-right flex-shrink-0">
                                                 <div className="mb-1">
                                                     <span className="text-xs text-slate-500 mr-2">총 비용:</span>
-                                                    <span className={`text-xl font-black ${method.isCheapest ? 'text-amber-400' : 'text-slate-200'}`}>
+                                                    <span className={`text-xl font-black ${method.isCheapest ? theme.text : 'text-slate-200'}`}>
                                                         {Math.round(method.cost).toLocaleString()}
                                                         <span className="text-xs font-normal text-slate-500 ml-1">골드</span>
                                                     </span>
                                                 </div>
+                                                {method.costPerItem > 0 && (
+                                                    <p className="text-xs text-slate-500">
+                                                        개당 <span className="text-slate-300 font-medium">{Math.round(method.costPerItem).toLocaleString()}</span>골드
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
 
