@@ -425,8 +425,7 @@ function AbidosCalculator() {
 
     const displayedMethods = showAllMethods ? sortedMethods : sortedMethods.slice(0, displayLimit);
 
-    // 모드별 빠른 선택 버튼
-    const quickCounts = craftMode === 'basic' ? [10, 20, 30, 40] : [5, 10, 20, 40];
+    const quickCounts = [10, 20, 30, 40];
 
     const resetAll = () => {
         setTargetCount(String(recipe.defaultCraft));
